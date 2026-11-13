@@ -2,6 +2,8 @@ import sinon from 'sinon';
 import { expect } from 'chai';
 import StronglyConnectedComponentsBuilder from '../../src/scc';
 import ExportMapBuilder from '../../src/exportMap/builder';
+import * as path from 'path';
+import { testContext, testFilePath } from './utils';
 
 function exportMapFixtureBuilder(path, imports, isOnlyImportingTypes = false) {
   return {
@@ -175,5 +177,26 @@ describe('Strongly Connected Components Builder', () => {
         });
       });
     });
+  });
+});
+
+describe('Strongly Connected Components Builder with `ignoreExternal`', () => {
+  const monorepo = testFilePath('cycles/monorepo');
+  const app = path.join(monorepo, 'packages/@myorg/app/index.js');
+  const shared = path.join(monorepo, 'node_modules/@myorg/shared/index.js');
+  const context = { ...testContext(), parserPath: 'espree', parserOptions: { ecmaVersion: 2015, sourceType: 'module' } };
+  afterEach(() => StronglyConnectedComponentsBuilder.clearCache());
+
+  it('leaves the modules in `node_modules` out of the graph, and records the names of their imports', () => {
+    const scc = StronglyConnectedComponentsBuilder.get(app, context, { ignoreExternal: true });
+    expect(Object.keys(scc)).to.include(app);
+    expect(Object.keys(scc).filter((file) => file.includes('node_modules'))).to.deep.equal([]);
+    expect([...StronglyConnectedComponentsBuilder.leftOutOf(scc)]).to.deep.equal(['@myorg/shared']);
+  });
+
+  it('keeps them without `ignoreExternal`', () => {
+    const scc = StronglyConnectedComponentsBuilder.get(app, context);
+    expect(scc).to.have.property(shared, scc[app]);
+    expect(StronglyConnectedComponentsBuilder.leftOutOf(scc).size).to.equal(0);
   });
 });

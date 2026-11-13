@@ -37,6 +37,7 @@ This change log adheres to standards from [Keep a CHANGELOG](https://keepachange
 - [actions] update `codecov/codecov-action` to v7, for reliable tokenless coverage uploads from fork PRs ([#3262], thanks [@captaindonald])
 - [Docs] clarify flat config file scoping ([#3283], thanks [@raisulchowdhury])
 - [Docs] show bare plugin flat config usage ([#3284], thanks [@raisulchowdhury])
+- [Performance] [`no-cycle`]: with `ignoreExternal`, leave imports of external modules that the linted file doesn't follow out of the SCC graph, so the dependencies' own imports are not parsed ([#3255], thanks [@yifanwww] [@MajorPrime] [@vyacheslavmeyerzon])
 
 ## [2.32.0] - 2025-06-20
 
@@ -1224,6 +1225,7 @@ for info on changes for earlier releases.
 [#3246]: https://github.com/import-js/eslint-plugin-import/pull/3246
 [#3237]: https://github.com/import-js/eslint-plugin-import/pull/3237
 [#3236]: https://github.com/import-js/eslint-plugin-import/pull/3236
+[#3255]: https://github.com/import-js/eslint-plugin-import/issues/3255
 [#3235]: https://github.com/import-js/eslint-plugin-import/issues/3235
 [#3233]: https://github.com/import-js/eslint-plugin-import/pull/3233
 [#3210]: https://github.com/import-js/eslint-plugin-import/pull/3210
@@ -2032,6 +2034,7 @@ for info on changes for earlier releases.
 [@magarcia]: https://github.com/magarcia
 [@magic-m-johnson]: https://github.com/magic-m-johnson
 [@Mairu]: https://github.com/Mairu
+[@MajorPrime]: https://github.com/MajorPrime
 [@malykhinvi]: https://github.com/malykhinvi
 [@manovotny]: https://github.com/manovotny
 [@manuth]: https://github.com/manuth
@@ -2163,6 +2166,7 @@ for info on changes for earlier releases.
 [@xpl]: https://github.com/xpl
 [@Xunnamius]: https://github.com/Xunnamius
 [@yesl-kim]: https://github.com/yesl-kim
+[@yifanwww]: https://github.com/yifanwww
 [@yndajas]: https://github.com/yndajas
 [@yordis]: https://github.com/yordis
 [@yp]: https://github.com/yp

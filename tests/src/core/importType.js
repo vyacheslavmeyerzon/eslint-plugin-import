@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import * as path from 'path';
 import isCoreModule from 'is-core-module';
 
-import importType, { isExternalModule, isScoped, isAbsolute } from 'core/importType';
+import importType, { isExternalModule, looksLikeExternalModule, isScoped, isAbsolute } from 'core/importType';
 
 import { testContext, testFilePath } from '../utils';
 
@@ -305,5 +305,42 @@ describe('isAbsolute', () => {
     expect(() => isAbsolute(false)).not.to.throw();
     expect(() => isAbsolute(0)).not.to.throw();
     expect(() => isAbsolute(NaN)).not.to.throw();
+  });
+});
+
+describe('looksLikeExternalModule', () => {
+  const monorepo = testFilePath('cycles/monorepo');
+  const shared = path.join(monorepo, 'node_modules/@myorg/shared/index.js');
+
+  it('is true for a bare name resolved into an external module folder in a package root', () => {
+    expect(looksLikeExternalModule('@myorg/shared', shared, {})).to.equal(true);
+  });
+
+  it('is false for a name that `import/internal-regex` matches', () => {
+    expect(looksLikeExternalModule('@myorg/shared', shared, { 'import/internal-regex': '^@myorg/' })).to.equal(false);
+  });
+
+  it('is false for a relative or absolute name, a builtin name, or no path', () => {
+    expect(looksLikeExternalModule('./node_modules/@myorg/shared', shared, {})).to.equal(false);
+    expect(looksLikeExternalModule(shared, shared, {})).to.equal(false);
+    expect(looksLikeExternalModule('fs', shared, {})).to.equal(false);
+    expect(looksLikeExternalModule('@myorg/shared', null, {})).to.equal(false);
+  });
+
+  it('is false for an external module folder that is not in a package root', () => {
+    const lib = testFilePath('cycles/src-node-modules/src/node_modules/src-node-modules-lib/index.js');
+    expect(looksLikeExternalModule('src-node-modules-lib', lib, {})).to.equal(false);
+  });
+
+  it('judges by the outermost external module folder', () => {
+    // `src-node-modules-lib` has a `package.json`, but `src`, which holds the outer `node_modules`, doesn't
+    const dep = testFilePath('cycles/src-node-modules/src/node_modules/src-node-modules-lib/node_modules/dep/index.js');
+    expect(looksLikeExternalModule('dep', dep, {})).to.equal(false);
+  });
+
+  it('follows `import/external-module-folders`, relative and absolute', () => {
+    expect(looksLikeExternalModule('@myorg/shared', shared, { 'import/external-module-folders': ['vendor'] })).to.equal(false);
+    expect(looksLikeExternalModule('@myorg/shared', shared, { 'import/external-module-folders': [path.join(monorepo, 'node_modules')] })).to.equal(true);
+    expect(looksLikeExternalModule('@myorg/shared', shared, { 'import/external-module-folders': [path.join(monorepo, 'packages')] })).to.equal(false);
   });
 });

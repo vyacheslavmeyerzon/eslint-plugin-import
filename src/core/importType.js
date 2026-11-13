@@ -158,6 +158,39 @@ export function isExternalModule(name, path, context) {
   return (isModule(name) || isScoped(name)) && typeTest(name, context, path) === 'external';
 }
 
+const isPackageRootCache = new Map();
+function isPackageRoot(dir) {
+  if (!isPackageRootCache.has(dir)) {
+    let isRoot = false;
+    try { isRoot = statSync(nodeResolve(dir, 'package.json')).isFile(); } catch (e) { /* not a package root */ }
+    isPackageRootCache.set(dir, isRoot);
+  }
+  return isPackageRootCache.get(dir);
+}
+
+/**
+ * Whether the module that `name` resolves to at `path` looks external without a linted file to judge from:
+ * a bare name that `import/internal-regex` doesn't match and that isn't a builtin,
+ * resolved into an external module folder that sits in a package root.
+ * `isExternalModule` can still disagree for a given linted file,
+ * which may resolve `name` to another path, or sit in a package that contains `path`.
+ */
+export function looksLikeExternalModule(name, path, settings) {
+  if (!path || !isExternalLookingName(name) || isAbsolute(name)) { return false; }
+  if (isInternalRegexMatch(name, settings) || isBuiltIn(name, settings, null)) { return false; }
+
+  const folders = settings && settings['import/external-module-folders'] || ['node_modules'];
+  const normalizedPath = path.replace(/\\/g, '/');
+  return folders.some((folder) => {
+    if (nodeIsAbsolute(folder)) {
+      return !relative(folder, path).startsWith('..');
+    }
+    const segment = `/${folder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')}/`;
+    const index = normalizedPath.indexOf(segment);
+    return index !== -1 && isPackageRoot(normalizedPath.slice(0, index) || '/');
+  });
+}
+
 export function isExternalModuleMain(name, path, context) {
   if (arguments.length < 3) {
     throw new TypeError('isExternalModule: name, path, and context are all required');

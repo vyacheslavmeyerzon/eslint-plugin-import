@@ -3,6 +3,7 @@
  * @author Ben Mosher
  */
 
+import { dirname } from 'path';
 import { getPhysicalFilename } from 'eslint-module-utils/contextCompat';
 import moduleVisitor, { makeOptionsSchema } from 'eslint-module-utils/moduleVisitor';
 import resolve from 'eslint-module-utils/resolve';
@@ -13,6 +14,8 @@ import { isExternalModule } from '../core/importType';
 import docsUrl from '../docsUrl';
 
 const traversed = new Set();
+// for each SCC graph built with `ignoreExternal`, whether it is safe to use for the linted files in a directory
+const safeForDirectory = new WeakMap();
 
 function routeString(route) {
   return route.map((s) => `${s.value}:${s.loc.start.line}`).join('=>');
@@ -70,10 +73,35 @@ module.exports = {
       context,
     );
 
+    // With `ignoreExternal`, the graph leaves out the imports of modules that look external by their name and path,
+    // unless the reports depend on more of the graph than the imports that the traversal below follows:
+    // with `commonjs` or `amd`, the graph has no edges for `require` or `define` calls,
+    // and with `allowUnsafeDynamicCyclicDependency`, the traversal stops looking at a module's imports
+    // at the first one that is dynamic and in the linted file's component.
+    const sccOptions = {
+      ignoreExternal: !!options.ignoreExternal
+        && !options.commonjs && !options.amd && !options.allowUnsafeDynamicCyclicDependency,
+    };
+    // The traversal classifies an import by resolving its name from the linted file instead,
+    // so if it could follow any of the left-out imports, only the full graph is safe to use.
+    function getScc(path) {
+      const scc = StronglyConnectedComponentsBuilder.get(path, context, sccOptions);
+      const leftOut = StronglyConnectedComponentsBuilder.leftOutOf(scc);
+      if (leftOut.size === 0) { return scc; }
+      if (!safeForDirectory.has(scc)) { safeForDirectory.set(scc, new Map()); }
+      const safe = safeForDirectory.get(scc);
+      // `ignoreModule` depends on the linted file only through its directory
+      const directory = dirname(myPath);
+      if (!safe.has(directory)) {
+        safe.set(directory, [...leftOut].every((name) => ignoreModule(name)));
+      }
+      return safe.get(directory) ? scc : StronglyConnectedComponentsBuilder.get(path, context);
+    }
+
     // `StronglyConnectedComponentsBuilder.get` returns null when `myPath` does not resolve,
     // e.g. an unsaved buffer (`eslint --stdin --stdin-filename=not-yet-written.js`, `ESLint#lintText`),
     // or a resolver that cannot resolve the linted file's own path (#3221).
-    const fileScc = options.disableScc ? {} : StronglyConnectedComponentsBuilder.get(myPath, context);
+    const fileScc = options.disableScc ? {} : getScc(myPath);
 
     function checkSourceValue(sourceNode, importer, moduleSystem) {
       if (ignoreModule(sourceNode.value, moduleSystem)) {
@@ -118,11 +146,14 @@ module.exports = {
       // since the graph cannot see the linted buffer's own edges.
       // If no graph can be built either (#3221), an empty map traverses everything,
       // exactly as `disableScc` does: every lookup is `undefined`, so every pair compares equal.
-      const importScc = fileScc ? null : StronglyConnectedComponentsBuilder.get(imported.path, context);
+      const importScc = fileScc ? null : getScc(imported.path);
       if (importScc && !(myPath in importScc)) {
         return; // `myPath` is unreachable from this import, so no cycle is possible
       }
-      const scc = fileScc || {};
+      // `getScc` checked the left-out names without a module system, which the resolver may take into account
+      const scc = fileScc && StronglyConnectedComponentsBuilder.leftOutOf(fileScc).has(sourceNode.value)
+        ? StronglyConnectedComponentsBuilder.get(myPath, context)
+        : fileScc || {};
 
       /* If we're in the same Strongly Connected Component,
        * Then there exists a path from each node in the SCC to every other node in the SCC,
